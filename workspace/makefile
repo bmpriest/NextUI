@@ -29,6 +29,13 @@ ifeq ($(PLATFORM), desktop)
 	cd ./all/minput/ && make
 	cd ./all/nextval/ && make
 	cd ./all/settings/ && make
+else ifeq ($(PLATFORM), my282)
+	cd ./$(PLATFORM)/libmsettings && make
+	cd ./$(PLATFORM)/keymon && make
+	cd ./all/nextui/ && make
+	cd ./all/minarch/ && make
+	cd ./all/settings/ && make
+	cd ./$(PLATFORM)/package && make
 else 
 ifeq ($(PLATFORM), tg5040)
 	cd ./$(PLATFORM)/rfkill && make all
@@ -56,12 +63,14 @@ endif
 	cd ./all/audiomon && make all
 	cd ./all/show2/ && make
 endif
+ifneq ($(PLATFORM),my282)
 ifdef COMPILE_CORES
 	make cores
 else
 	echo "skipping core build"
 endif
 	cd ./$(PLATFORM) && make
+endif
 
 cores:
 	cd ./$(PLATFORM)/cores && make
@@ -73,6 +82,15 @@ endif
 	cd ./$(PLATFORM)/cores && make $(CORE)
 
 clean:
+ifeq ($(PLATFORM),my282)
+	cd ./$(PLATFORM)/libmsettings && make clean
+	cd ./$(PLATFORM)/keymon && make clean
+	cd ./all/nextui/ && make clean
+	cd ./all/minarch/ && make clean
+	cd ./all/settings/ && make clean
+	cd ./$(PLATFORM)/cores && make clean
+	cd ./$(PLATFORM)/package && make clean
+else
 ifneq ($(PLATFORM), desktop)
 	cd ./$(PLATFORM)/keymon && make clean
 	cd ./all/syncsettings/ && make clean
@@ -100,3 +118,4 @@ endif
 	cd ./all/settings/ && make clean
 	cd ./all/audiomon/ && make clean
 	cd ./$(PLATFORM) && make clean
+endif

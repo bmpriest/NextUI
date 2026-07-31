@@ -861,6 +861,10 @@ bool PLAT_wifiDiagnosticsEnabled();
 // returns true if diagnostic logging is enabled
 void PLAT_wifiDiagnosticsEnable(bool on);
 
+// Called when an application has committed to a process exit, before any
+// menu/layer cleanup that could expose a platform-native scanout.
+void PLAT_prepareForProcessExit(void);
+
 #define WIFI_init PLAT_wifiInit
 #define WIFI_supported PLAT_hasWifi
 #define WIFI_enabled PLAT_wifiEnabled

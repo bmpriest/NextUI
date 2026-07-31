@@ -20,7 +20,10 @@ void Core_open(const char* core_path, const char* tag_name) {
 	LOG_info("Core_open\n");
 	core.handle = dlopen(core_path, RTLD_LAZY);
 	
-	if (!core.handle) LOG_error("%s\n", dlerror());
+	if (!core.handle) {
+		LOG_error("Could not load core %s: %s\n", core_path, dlerror());
+		exit(EXIT_FAILURE);
+	}
 	
 	core.init = dlsym(core.handle, "retro_init");
 	core.deinit = dlsym(core.handle, "retro_deinit");
@@ -54,6 +57,16 @@ void Core_open(const char* core_path, const char* tag_name) {
 	set_audio_sample_batch_callback = dlsym(core.handle, "retro_set_audio_sample_batch");
 	set_input_poll_callback = dlsym(core.handle, "retro_set_input_poll");
 	set_input_state_callback = dlsym(core.handle, "retro_set_input_state");
+
+	if (!core.init || !core.deinit || !core.get_system_info ||
+	    !core.get_system_av_info || !core.run || !core.load_game ||
+	    !set_environment_callback || !set_video_refresh_callback ||
+	    !set_audio_sample_callback || !set_audio_sample_batch_callback ||
+	    !set_input_poll_callback || !set_input_state_callback) {
+		LOG_error("Core %s is missing required libretro entry points\n",
+		          core_path);
+		exit(EXIT_FAILURE);
+	}
 	
 	struct retro_system_info info = {};
 	core.get_system_info(&info);
@@ -78,7 +91,8 @@ void Core_open(const char* core_path, const char* tag_name) {
 	sprintf((char*)core.overlays_dir, SDCARD_PATH "/Overlays/%s", core.tag);
 	
 	char cmd[512];
-	sprintf(cmd, "mkdir -p \"%s\"; mkdir -p \"%s\"", core.config_dir, core.states_dir);
+	sprintf(cmd, "mkdir -p \"%s\"; mkdir -p \"%s\"; mkdir -p \"%s\"",
+	        core.config_dir, core.states_dir, core.saves_dir);
 	system(cmd);
 
 	set_environment_callback(environment_callback);

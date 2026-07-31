@@ -1,6 +1,9 @@
 #pragma once
 
 #include "menu.hpp"
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
 #include <thread>
 
 namespace Wifi
@@ -15,7 +18,9 @@ namespace Wifi
         MenuItem *diagItem;
 
         std::thread worker;
-        bool quit = false;
+        std::atomic<bool> quit{false};
+        std::condition_variable quitCondition;
+        std::mutex quitMutex;
         bool selectionDirty = false;
 
     public:

@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <time.h>
 #include <unistd.h>
 #include <sys/stat.h>
 
@@ -190,7 +191,11 @@ static struct PWR_Context
 	SDL_atomic_t is_online;
 	SDL_atomic_t update_secs;
 	SDL_atomic_t poll_network_status;
+	SDL_atomic_t monitor_quit;
 } pwr = {0};
+
+static pthread_mutex_t pwr_monitor_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t pwr_monitor_cond = PTHREAD_COND_INITIALIZER;
 
 static struct SND_Context
 {
@@ -3992,7 +3997,7 @@ void PWR_updateFrequency(int secs, int updateWifi)
 
 static void *PWR_monitorBattery(void *arg)
 {
-	while (1)
+	while (!SDL_AtomicGet(&pwr.monitor_quit))
 	{
 		struct PWR_Context *pwr_ctx = (struct PWR_Context *)arg;
 		int interval = SDL_AtomicGet(&pwr_ctx->update_secs);
@@ -4000,7 +4005,15 @@ static void *PWR_monitorBattery(void *arg)
 			interval = 1;
 		PWR_updateBatteryStatus();
 		PWR_updateNetworkStatus();
-		sleep(interval);
+
+		struct timespec wake;
+		clock_gettime(CLOCK_REALTIME, &wake);
+		wake.tv_sec += interval;
+		pthread_mutex_lock(&pwr_monitor_mutex);
+		if (!SDL_AtomicGet(&pwr.monitor_quit))
+			pthread_cond_timedwait(
+				&pwr_monitor_cond, &pwr_monitor_mutex, &wake);
+		pthread_mutex_unlock(&pwr_monitor_mutex);
 	}
 	return NULL;
 }
@@ -4019,6 +4032,7 @@ void PWR_init(void)
 
 	SDL_AtomicSet(&pwr.update_secs, 5);
 	SDL_AtomicSet(&pwr.poll_network_status, 1);
+	SDL_AtomicSet(&pwr.monitor_quit, 0);
 	pwr.initialized = 1;
 
 	if (CFG_getHaptics())
@@ -4034,9 +4048,14 @@ void PWR_quit(void)
 	if (!pwr.initialized)
 		return;
 
-	// cancel battery thread
-	pthread_cancel(pwr.battery_pt);
+	// Stop cooperatively. Cancelling a pthread out from under a C++ caller can
+	// surface libgcc's forced-unwind exception as std::terminate at shutdown.
+	SDL_AtomicSet(&pwr.monitor_quit, 1);
+	pthread_mutex_lock(&pwr_monitor_mutex);
+	pthread_cond_signal(&pwr_monitor_cond);
+	pthread_mutex_unlock(&pwr_monitor_mutex);
 	pthread_join(pwr.battery_pt, NULL);
+	pwr.initialized = 0;
 }
 
 int PWR_ignoreSettingInput(int btn, int show_setting)
@@ -4725,6 +4744,8 @@ FALLBACK_IMPLEMENTATION void PLAT_wifiConnectPass(const char *ssid, WifiSecurity
 FALLBACK_IMPLEMENTATION void PLAT_wifiDisconnect() {}
 FALLBACK_IMPLEMENTATION bool PLAT_wifiDiagnosticsEnabled() { return false; }
 FALLBACK_IMPLEMENTATION void PLAT_wifiDiagnosticsEnable(bool on) {}
+
+FALLBACK_IMPLEMENTATION void PLAT_prepareForProcessExit(void) {}
 
 /////////////////////////////////////////////////////////////////////////////////////////
 

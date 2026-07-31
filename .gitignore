@@ -8,6 +8,14 @@
 build
 releases
 toolchains
+!toolchains/
+toolchains/*
+!toolchains/my282-toolchain/
+!toolchains/my282-toolchain/**
+docs/*
+!docs/PORTING-MY282.md
+!docs/my282-tests/
+!docs/my282-tests/**
 libretro-common
 libchdr
 

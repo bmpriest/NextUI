@@ -35,7 +35,8 @@ Menu::Menu(const int &globalQuit, int &globalDirty) : MenuList(MenuItemType::Fix
 
 Menu::~Menu()
 {
-    quit = true;
+    quit.store(true);
+    quitCondition.notify_all();
     if (worker.joinable())
         worker.join();
 }
@@ -96,7 +97,7 @@ void Menu::updater()
 {
     int pollSecs = 15;
 
-    while (!quit && !globalQuit)
+    while (!quit.load())
     {
         // TODO: pause when menu is not rendered
         if (WIFI_enabled())
@@ -200,7 +201,9 @@ void Menu::updater()
             selectionDirty = false;        
         }
 
-        std::this_thread::sleep_for(std::chrono::seconds(pollSecs));
+        std::unique_lock<std::mutex> quitLock(quitMutex);
+        quitCondition.wait_for(quitLock, std::chrono::seconds(pollSecs),
+                               [this]() { return quit.load(); });
     }
 }
 

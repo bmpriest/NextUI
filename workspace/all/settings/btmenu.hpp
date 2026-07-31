@@ -1,6 +1,9 @@
 #pragma once
 
 #include "menu.hpp"
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
 #include <thread>
 
 namespace Bluetooth
@@ -19,7 +22,9 @@ namespace Bluetooth
         MenuItem *rateItem;
         
         std::thread worker;
-        bool quit = false;
+        std::atomic<bool> quit{false};
+        std::condition_variable quitCondition;
+        std::mutex quitMutex;
         bool selectionDirty = false;
         
         PairingAgent* pairingAgent = nullptr;

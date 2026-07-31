@@ -8,10 +8,21 @@ endif
 
 HOST_WORKSPACE=$(shell pwd)/workspace
 GUEST_WORKSPACE=/root/workspace
+HOST_SKELETON=$(shell pwd)/skeleton
+GUEST_SKELETON=/root/skeleton
+SOURCE_MOUNTS=-v $(HOST_WORKSPACE):$(GUEST_WORKSPACE) \
+	-v $(HOST_SKELETON):$(GUEST_SKELETON):ro
 
 GIT_IF_NECESSARY=toolchains/$(PLATFORM)-toolchain
 INIT_IF_NECESSARY=toolchains/$(PLATFORM)-toolchain/.build
 IMAGE_NAME=ghcr.io/loveretro/$(PLATFORM)-toolchain:latest
+
+# The A30 toolchain is bootstrapped in-tree while the port is under
+# development. Once published, this can use the same pull/clone flow as the
+# established platforms.
+ifeq ($(PLATFORM),my282)
+IMAGE_NAME=nextui-my282-toolchain:local
+endif
 
 CONTAINER_RUNTIME ?= $(shell command -v docker 2>/dev/null || command -v podman 2>/dev/null)
 ifeq (,$(CONTAINER_RUNTIME))
@@ -28,7 +39,7 @@ LAST_RUNTIME := $(shell cat $(RUNTIME_MARKER) 2>/dev/null)
 CURRENT_RUNTIME := $(notdir $(CONTAINER_RUNTIME))
 
 all: $(INIT_IF_NECESSARY)
-	$(CONTAINER_RUNTIME) run -it --rm $(CONTAINER_MOUNT_OPTS) -v $(HOST_WORKSPACE):$(GUEST_WORKSPACE) $(IMAGE_NAME) /bin/bash
+	$(CONTAINER_RUNTIME) run -it --rm $(CONTAINER_MOUNT_OPTS) $(SOURCE_MOUNTS) $(IMAGE_NAME) /bin/bash
 
 $(INIT_IF_NECESSARY): $(GIT_IF_NECESSARY)
 	cd toolchains/$(PLATFORM)-toolchain && make .build
@@ -46,7 +57,7 @@ _runtime_check:
 		echo "Container runtime changed ($(LAST_RUNTIME) -> $(CURRENT_RUNTIME)), cleaning workspace build artifacts..."; \
 		PREV=$$(command -v $(LAST_RUNTIME) 2>/dev/null); \
 		if [ -n "$$PREV" ]; then \
-			$$PREV run --rm $(CONTAINER_MOUNT_OPTS) -v $(HOST_WORKSPACE):$(GUEST_WORKSPACE) $(IMAGE_NAME) /bin/bash -c \
+			$$PREV run --rm $(CONTAINER_MOUNT_OPTS) $(SOURCE_MOUNTS) $(IMAGE_NAME) /bin/bash -c \
 				'find $(GUEST_WORKSPACE) -depth -user root -delete 2>/dev/null; true'; \
 		else \
 			echo "Error: previous runtime $(LAST_RUNTIME) not available to clean root-owned artifacts."; \
@@ -56,16 +67,19 @@ _runtime_check:
 	fi
 
 build: $(INIT_IF_NECESSARY) _runtime_check
-	$(CONTAINER_RUNTIME) run --rm $(CONTAINER_MOUNT_OPTS) -v $(HOST_WORKSPACE):$(GUEST_WORKSPACE) -e COMPILE_CORES=$(COMPILE_CORES) $(IMAGE_NAME) /bin/bash -c '. ~/.bashrc && cd /root/workspace && make'
+	$(CONTAINER_RUNTIME) run --rm $(CONTAINER_MOUNT_OPTS) $(SOURCE_MOUNTS) -e COMPILE_CORES=$(COMPILE_CORES) $(IMAGE_NAME) /bin/bash -c '. ~/.bashrc && cd /root/workspace && make'
 	@echo "$(CURRENT_RUNTIME)" > $(RUNTIME_MARKER)
 
 build-cores: $(INIT_IF_NECESSARY) _runtime_check
-	$(CONTAINER_RUNTIME) run --rm $(CONTAINER_MOUNT_OPTS) -v $(HOST_WORKSPACE):$(GUEST_WORKSPACE) -e COMPILE_CORES=$(COMPILE_CORES) $(IMAGE_NAME) /bin/bash -c '. ~/.bashrc && cd /root/workspace && make cores'
+	$(CONTAINER_RUNTIME) run --rm $(CONTAINER_MOUNT_OPTS) $(SOURCE_MOUNTS) -e COMPILE_CORES=$(COMPILE_CORES) $(IMAGE_NAME) /bin/bash -c '. ~/.bashrc && cd /root/workspace && make cores'
 	@echo "$(CURRENT_RUNTIME)" > $(RUNTIME_MARKER)
 
 build-core: $(INIT_IF_NECESSARY) _runtime_check
 ifndef CORE
 	$(error CORE is not set)
 endif
-	$(CONTAINER_RUNTIME) run --rm $(CONTAINER_MOUNT_OPTS) -v $(HOST_WORKSPACE):$(GUEST_WORKSPACE) -e COMPILE_CORES=$(COMPILE_CORES) -e CORE=$(CORE) $(IMAGE_NAME) /bin/bash -c '. ~/.bashrc && cd /root/workspace && make core'
+	$(CONTAINER_RUNTIME) run --rm $(CONTAINER_MOUNT_OPTS) $(SOURCE_MOUNTS) -e COMPILE_CORES=$(COMPILE_CORES) -e CORE=$(CORE) $(IMAGE_NAME) /bin/bash -c '. ~/.bashrc && cd /root/workspace && make core'
 	@echo "$(CURRENT_RUNTIME)" > $(RUNTIME_MARKER)
+
+diagnostic: $(INIT_IF_NECESSARY)
+	$(CONTAINER_RUNTIME) run --rm $(CONTAINER_MOUNT_OPTS) $(SOURCE_MOUNTS) $(IMAGE_NAME) /bin/bash -c '. ~/.bashrc && $(MAKE) -C /root/workspace/my282/diagnostics'

@@ -31,6 +31,11 @@ SOURCE = $(TARGET).c ma_cheats.c ma_rewind.c ma_audio.c ma_input.c \
 ifneq (,$(filter $(PLATFORM),tg5040 tg5050 my355 desktop))
 # RA source files
 SOURCE += ../common/http.c ../common/ra_badges.c ../common/ra_offline.c ../common/ra_sync.c ../common/ra_event_queue.c ra_integration.c chd_reader.c
+else ifeq ($(PLATFORM),my282)
+# The A30 alpha intentionally leaves RetroAchievements disabled while Wi-Fi
+# lifecycle work is pending. Keep the unified menu buildable with no-op RA
+# entry points.
+SOURCE += ra_disabled.c
 endif
 
 CC = $(CROSS_COMPILE)gcc
@@ -87,7 +92,12 @@ LDFLAGS += -lasan
 endif
 endif
 
+ifeq ($(PLATFORM),my282)
+# GCC's wrapper loads the LTO plugin when indexing libsrm.a.
+AR=$(CROSS_COMPILE)gcc-ar
+else
 AR=$(CROSS_COMPILE)ar
+endif
 ARFLAGS=rc
 
 BUILD_DATE!=date +%Y.%m.%d
@@ -117,6 +127,17 @@ endif
 	cp -L $(PREFIX)/lib/libzstd.so.1 build/$(PLATFORM)
 	cp -L $(PREFIX)/lib/liblz4.so.1 build/$(PLATFORM)
 	cp -L libchdr/build/$(PLATFORM)/libchdr.so.0 build/$(PLATFORM)
+	$(CC) $(SOURCE) -o $(PRODUCT) $(CFLAGS) $(LDFLAGS)
+else ifeq ($(PLATFORM),my282)
+# Miyoo A30 alpha: non-RA MinArch with the stock glibc 2.23 ABI.
+all: clean libretro-common libsrm.a rcheevos $(PREFIX_LOCAL)/include/msettings.h
+	mkdir -p build/$(PLATFORM)
+	cp -L $(PREFIX_LOCAL)/lib/libsamplerate.so.0 build/$(PLATFORM)
+	cp -L $(PREFIX_LOCAL)/lib/liblz4.so.1 build/$(PLATFORM)
+	cp -L $(PREFIX)/lib/libzip.so.5 build/$(PLATFORM)
+	cp -L $(PREFIX)/lib/libcrypto.so.3 build/$(PLATFORM)
+	cp -L $(PREFIX)/lib/libbz2.so.1.0 build/$(PLATFORM)
+	cp -L $(SYSROOT)/lib/libatomic.so.1 build/$(PLATFORM)
 	$(CC) $(SOURCE) -o $(PRODUCT) $(CFLAGS) $(LDFLAGS)
 endif
 

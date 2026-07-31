@@ -128,6 +128,9 @@ void hdmimon(void) {
 #define PWR_UPDATE_FREQ_INGAME 20
 
 int main(int argc , char* argv[]) {
+	setvbuf(stdout, NULL, _IONBF, 0);
+	setvbuf(stderr, NULL, _IONBF, 0);
+
 	//static char asoundpath[MAX_PATH];
 	//sprintf(asoundpath, "%s/.asoundrc", getenv("HOME"));
 	//LOG_info("minarch: need asoundrc at %s\n", asoundpath);
@@ -136,7 +139,7 @@ int main(int argc , char* argv[]) {
 	//else 
 	//	LOG_info("asoundrc does not exist at %s\n", asoundpath);
 
-	if(argc < 2)
+	if(argc < 3)
 		return EXIT_FAILURE;
 
 	PWR_setCPUSpeed(CPU_SPEED_PERFORMANCE); // start in performance mode for fast loading
@@ -338,6 +341,9 @@ int main(int argc , char* argv[]) {
 	free(pixels); 
 	GFX_animateSurfaceOpacity(converted, 0, 0, cw, ch, 255, 0, CFG_getMenuTransitions() ? 200 : 20, 1);
 	SDL_FreeSurface(converted); 
+	// The normal fade is complete. Platforms with a fragile display handoff
+	// can now hide teardown without suppressing the transition itself.
+	PLAT_prepareForProcessExit();
 	
 	Video_cleanup();
 

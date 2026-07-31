@@ -250,14 +250,16 @@ namespace {
             BrickPro,
             SmartPro,
             SmartProS,
-            Flip
+            Flip,
+            A30
         };
 
         enum Platform {
             UnknownPlatform,
             tg5040,
             tg5050,
-            my355
+            my355,
+            my282
         };
 
         DeviceInfo() {
@@ -283,6 +285,10 @@ namespace {
                     m_vendor = Trimui;
                     m_model = Flip;
                     m_platform = my355;
+                } else if(exactMatch("my282", device)) {
+                    m_vendor = Miyoo;
+                    m_model = A30;
+                    m_platform = my282;
                 }
             }
         }
@@ -320,7 +326,8 @@ namespace {
         }
 
         bool hasWifi() const {
-            return m_platform == tg5050 || m_platform == tg5040 || m_platform == my355;
+            return m_platform == tg5050 || m_platform == tg5040 ||
+                   m_platform == my355 || m_platform == my282;
         }
 
         bool hasBluetooth() const {
@@ -335,6 +342,10 @@ namespace {
 }
 int main(int argc, char *argv[])
 {
+	setvbuf(stdout, NULL, _IONBF, 0);
+	setvbuf(stderr, NULL, _IONBF, 0);
+    std::unique_ptr<Wifi::Menu> wifiMenu;
+    std::unique_ptr<Bluetooth::Menu> bluetoothMenu;
     try
     {
         DeviceInfo deviceInfo;
@@ -371,6 +382,10 @@ int main(int argc, char *argv[])
             tz_values.push_back(std::string(timezones[i]));
             // Todo: beautify, remove underscores and so on
             tz_labels.push_back(std::string(timezones[i]));
+        }
+        if (tz_values.empty()) {
+            tz_values.push_back(std::string("UTC"));
+            tz_labels.push_back(std::string("UTC"));
         }
 
         // Factory helpers to avoid repeating identical lambda boilerplate for each picker.
@@ -1035,23 +1050,32 @@ int main(int argc, char *argv[])
         {
             new StaticMenuItem{ListItemType::Generic, "NextUI version", "",
             []() -> std::any {
+                LOG_info("About: reading NextUI version\n");
                 std::ifstream t(ROOT_SYSTEM_PATH "/version.txt");
                 std::stringstream buffer;
                 buffer << t.rdbuf();
-                return buffer.str();
+                std::string value = buffer.str();
+                if (value.empty()) value = "Unknown";
+                LOG_info("About: NextUI version ready\n");
+                return value;
             }},
             new StaticMenuItem{ListItemType::Generic, "Platform", "",
             []() -> std::any {
-                return std::string(PLAT_getModel()); }
+                LOG_info("About: reading platform\n");
+                const char *model = PLAT_getModel();
+                return std::string(model ? model : "Unknown"); }
             },
             new StaticMenuItem{ListItemType::Generic, "Stock OS version", "",
             []() -> std::any {
+                LOG_info("About: reading stock OS version\n");
                 char osver[128];
                 PLAT_getOsVersionInfo(osver, 128);
                 return std::string(osver); }
             },
             new StaticMenuItem{ListItemType::Generic, "Busybox version", "",
-            [&]() -> std::any { return bbver; }
+            [&]() -> std::any {
+                LOG_info("About: reading BusyBox version\n");
+                return bbver; }
             },
         });
 
@@ -1072,11 +1096,15 @@ int main(int argc, char *argv[])
 
         mainItems.push_back(new MenuItem{ListItemType::Generic, "In-Game", "In-game settings for MinArch", {}, {}, nullptr, nullptr, DeferToSubmenu, minarchMenu});
 
-        if(deviceInfo.hasWifi())
-            mainItems.push_back(new MenuItem{ListItemType::Generic, "Network", "", {}, {}, nullptr, nullptr, DeferToSubmenu, new Wifi::Menu(appQuit, ctx.dirty)});
+        if(deviceInfo.hasWifi()) {
+            wifiMenu = std::make_unique<Wifi::Menu>(appQuit, ctx.dirty);
+            mainItems.push_back(new MenuItem{ListItemType::Generic, "Network", "", {}, {}, nullptr, nullptr, DeferToSubmenu, wifiMenu.get()});
+        }
 
-        if(deviceInfo.hasBluetooth())
-            mainItems.push_back(new MenuItem{ListItemType::Generic, "Bluetooth", "", {}, {}, nullptr, nullptr, DeferToSubmenu, new Bluetooth::Menu(appQuit, ctx.dirty)});
+        if(deviceInfo.hasBluetooth()) {
+            bluetoothMenu = std::make_unique<Bluetooth::Menu>(appQuit, ctx.dirty);
+            mainItems.push_back(new MenuItem{ListItemType::Generic, "Bluetooth", "", {}, {}, nullptr, nullptr, DeferToSubmenu, bluetoothMenu.get()});
+        }
 
         mainItems.push_back(new MenuItem{ListItemType::Generic, "About", "", {}, {}, nullptr, nullptr, DeferToSubmenu, aboutMenu});
 
@@ -1187,24 +1215,36 @@ int main(int argc, char *argv[])
                 GFX_sync();
         }
 
+        LOG_info("Settings cleanup: stopping network workers\n");
+        wifiMenu.reset();
+        bluetoothMenu.reset();
+        LOG_info("Settings cleanup: network workers stopped\n");
         delete ctx.menu;
         delete appearanceMenu;
         delete systemMenu;
         ctx.menu = NULL;
+        LOG_info("Settings cleanup: menus deleted\n");
 
         // Color pickers are owned by unique_ptrs above; destroyed automatically here.
 
         QuitSettings();
+        LOG_info("Settings cleanup: shared settings closed\n");
         PWR_quit();
+        LOG_info("Settings cleanup: power monitor stopped\n");
         PAD_quit();
+        LOG_info("Settings cleanup: input stopped\n");
         BT_quit();
+        LOG_info("Settings cleanup: Bluetooth stopped\n");
         GFX_quit();
+		LOG_info("Settings cleanup: video stopped\n");
 
         return EXIT_SUCCESS;
     }
     catch (const std::exception &e)
     {
         LOG_error("%s", e.what());
+        wifiMenu.reset();
+        bluetoothMenu.reset();
         QuitSettings();
         PWR_quit();
         PAD_quit();

@@ -1,0 +1,53 @@
+diff --git a/Makefile.libretro b/Makefile.libretro
+index 2197946c..ac9020be 100644
+--- a/Makefile.libretro
++++ b/Makefile.libretro
+@@ -518,6 +518,26 @@ else ifeq ($(platform), rpi4_64)
+         fpic := -fPIC
+         CFLAGS += -march=armv8-a+crc+simd -mtune=cortex-a72 -ftree-vectorize
+ 
++# Miyoo A30
++else ifeq ($(platform), my282)
++	TARGET := $(TARGET_NAME)_libretro.so
++	CC = $(CROSS_COMPILE)gcc
++	CXX = $(CROSS_COMPILE)g++
++	AR = $(CROSS_COMPILE)ar
++	CFLAGS += -marm -mtune=cortex-a7
++	CFLAGS += -mfpu=neon-vfpv4 -mfloat-abi=hard
++	CFLAGS += -fomit-frame-pointer -ffast-math -fdata-sections
++	CFLAGS += -ffunction-sections -fsingle-precision-constant -flto -fPIC
++	CFLAGS += -DNO_HWCAP
++	LDFLAGS += -flto -fPIC
++	CPU_ARCH := arm
++	OPTIMIZE := -O3 -Ofast -DNDEBUG
++	HAVE_NEON = 1
++	HAVE_NEON_ASM = 1
++	BUILTIN_GPU = neon
++	ARCH = arm
++	DYNAREC = ari64
++
+ # Classic Platforms ####################
+ # Platform affix = classic_<ISA>_<µARCH>
+ # Help at https://modmyclassic.com/comp
+diff --git a/deps/libchdr/deps/lzma-24.05/src/CpuArch.c b/deps/libchdr/deps/lzma-24.05/src/CpuArch.c
+index 923b939..e31dd57 100644
+--- a/deps/libchdr/deps/lzma-24.05/src/CpuArch.c
++++ b/deps/libchdr/deps/lzma-24.05/src/CpuArch.c
+@@ -847,10 +847,17 @@ BoolInt CPU_IsSupported_NEON(void) { return 1; }
+ 
+ #endif // USE_HWCAP
+ 
++#ifdef MY_CPU_ARM64
+ MY_HWCAP_CHECK_FUNC (CRC32)
+ MY_HWCAP_CHECK_FUNC (SHA1)
+ MY_HWCAP_CHECK_FUNC (SHA2)
+ MY_HWCAP_CHECK_FUNC (AES)
++#else
++BoolInt CPU_IsSupported_CRC32(void) { return 0; }
++BoolInt CPU_IsSupported_SHA1(void)  { return 0; }
++BoolInt CPU_IsSupported_SHA2(void)  { return 0; }
++BoolInt CPU_IsSupported_AES(void)   { return 0; }
++#endif
+ 
+ #endif // __APPLE__
+ #endif // _WIN32

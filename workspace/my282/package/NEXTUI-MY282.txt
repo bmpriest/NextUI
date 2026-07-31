@@ -1,0 +1,18 @@
+NextUI for Miyoo A30 (my282)
+
+This card must contain both of these hidden directories at its root:
+
+  .tmp_update
+  .system
+
+The A30 starts NextUI through .tmp_update/updater. If that directory is
+missing, the device will boot the stock operating system. Extract the
+provided NextUI-my282.zip directly to the root of a FAT32 card; do not copy
+with a wildcard or a file operation that omits dot-directories.
+
+Required boot files:
+
+  .tmp_update/updater
+  .tmp_update/my282.sh
+  .system/my282/paks/MinUI.pak/launch.sh
+

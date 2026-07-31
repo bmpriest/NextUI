@@ -73,6 +73,19 @@ static bool wifi_get_ip(char *ip, size_t len) {
         ip[len - 1] = '\0';
         return true;
     }
+
+    // Older firmware, including the Miyoo A30, has ifconfig but no iproute2.
+    snprintf(cmd, sizeof(cmd),
+             "ifconfig %s 2>/dev/null | sed -n "
+             "\"s/.*inet addr:\\([^ ]*\\).*/\\1/p; "
+             "s/.*inet \\([^ ]*\\).*/\\1/p\" | head -n 1",
+             WIFI_INTERFACE);
+    if (wifi_run_cmd(cmd, output, sizeof(output)) == 0 && output[0] != '\0') {
+        trimTrailingNewlines(output);
+        strncpy(ip, output, len - 1);
+        ip[len - 1] = '\0';
+        return true;
+    }
     ip[0] = '\0';
     return false;
 }
