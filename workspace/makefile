@@ -31,9 +31,19 @@ ifeq ($(PLATFORM), desktop)
 	cd ./all/settings/ && make
 else ifeq ($(PLATFORM), my282)
 	cd ./$(PLATFORM)/libmsettings && make
+	cd ./$(PLATFORM) && make early
 	cd ./$(PLATFORM)/keymon && make
 	cd ./all/nextui/ && make
 	cd ./all/minarch/ && make
+	cd ./all/libgametimedb/ && make
+	cd ./all/gametimectl/ && make
+	cd ./all/gametime/ && make
+	cd ./all/libbatmondb/ && make
+	cd ./all/batmon/ && make
+	cd ./all/battery/ && make
+	cd ./all/clock/ && make
+	cd ./all/minput/ && make
+	cd ./all/minuilist/ && make
 	cd ./all/settings/ && make
 	cd ./$(PLATFORM)/package && make
 else 
@@ -83,10 +93,20 @@ endif
 
 clean:
 ifeq ($(PLATFORM),my282)
+	cd ./$(PLATFORM) && make clean
 	cd ./$(PLATFORM)/libmsettings && make clean
 	cd ./$(PLATFORM)/keymon && make clean
 	cd ./all/nextui/ && make clean
 	cd ./all/minarch/ && make clean
+	cd ./all/libgametimedb/ && make clean
+	cd ./all/gametimectl/ && make clean
+	cd ./all/gametime/ && make clean
+	cd ./all/batmon/ && make clean
+	cd ./all/battery/ && make clean
+	cd ./all/libbatmondb/ && make clean
+	cd ./all/clock/ && make clean
+	cd ./all/minput/ && make clean
+	cd ./all/minuilist/ && make clean
 	cd ./all/settings/ && make clean
 	cd ./$(PLATFORM)/cores && make clean
 	cd ./$(PLATFORM)/package && make clean

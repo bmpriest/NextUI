@@ -113,4 +113,9 @@
 #define SCREEN_FPS      60.0
 #define MAX_LIGHTS      0
 
+// The A30 exposes one non-clickable analog stick through its UART rather than
+// a standard evdev/SDL axis.
+#define HAS_LEFT_ANALOG  1
+#define HAS_RIGHT_ANALOG 0
+
 #endif

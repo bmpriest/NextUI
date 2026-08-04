@@ -1,0 +1,5 @@
+#!/bin/sh
+
+killall dropbearmulti 2>/dev/null || true
+umount /etc/passwd 2>/dev/null || true
+umount /etc/group 2>/dev/null || true

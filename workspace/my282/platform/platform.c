@@ -501,16 +501,13 @@ void PLAT_getOsVersionInfo(char *output_str, size_t max_len) {
 // MinArch's optional shader path still needs separate GLES2 compatibility work.
 #include "platform_video.c"
 
-// The generic GL capture flips framebuffer rows for a landscape-native
-// display. The A30 renders into an already logical-orientation FBO before its
-// portrait scanout rotation, so applying that flip produces an upside-down
-// MinArch exit fade. Keep the generic implementation available under a private
-// name and provide the A30 capture immediately below.
-#define PLAT_GL_screenCapture my282_generic_GL_screenCapture
 #include "generic_video.c"
-#undef PLAT_GL_screenCapture
 
-unsigned char *PLAT_GL_screenCapture(int *outWidth, int *outHeight) {
+// Normal captures keep the generic GL row flip so screenshots and save-state
+// previews use top-left image coordinates. The A30 exit fade is different: it
+// reads the logical FBO immediately before the portrait presentation pass, and
+// applying that row flip makes the visible fade upside down.
+unsigned char *PLAT_GL_exitCapture(int *outWidth, int *outHeight) {
 	glViewport(0, 0, device_width, device_height);
 	GLint viewport[4];
 	glGetIntegerv(GL_VIEWPORT, viewport);

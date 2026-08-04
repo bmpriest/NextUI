@@ -1,0 +1,50 @@
+#!/bin/sh
+
+BIN_DIR="$(dirname "$0")"
+PAK_DIR="$(dirname "$BIN_DIR")"
+PAK_NAME="$(basename "$PAK_DIR")"
+PAK_NAME="${PAK_NAME%.*}"
+STATE="$USERDATA_PATH/$PAK_NAME"
+DROPBEAR="$PAK_DIR/bin/arm/dropbearmulti"
+HOST_KEY="$STATE/dropbear_ed25519_host_key"
+PASSWD_FILE="$STATE/passwd"
+SERVICE_LOG="$LOGS_PATH/$PAK_NAME.service.txt"
+ROOT_HOME="$STATE/root"
+
+mkdir -p "$STATE" "$ROOT_HOME" "$LOGS_PATH"
+
+# Use the maintained pak's credentials without writing to the read-only root
+# filesystem. Defaults remain root:tina and trimui:trimui.
+cp "$PAK_DIR/res/etc/passwd.template" "$PASSWD_FILE" || exit 1
+# shellcheck disable=SC2016
+ROOT_HASH='$1$xyz$aO9utGNHk.FAqgCQghNg/1'
+# shellcheck disable=SC2016
+TRIMUI_HASH='$1$xyz$4mAm0CgEQkOzH6K/ibOvO1'
+sed -i "s:ROOT_PASSWORD:$ROOT_HASH:g" "$PASSWD_FILE"
+sed -i "s:TRIMUI_PASSWORD:$TRIMUI_HASH:g" "$PASSWD_FILE"
+# The firmware's /root lives on its read-only squashfs. Give root a writable
+# SD-card home so Dropbear public-key authentication can work as expected.
+sed -i "s#:/root:/bin/ash#:$ROOT_HOME:/bin/ash#" "$PASSWD_FILE"
+
+umount /etc/passwd 2>/dev/null || true
+umount /etc/group 2>/dev/null || true
+mount -o bind "$PASSWD_FILE" /etc/passwd || exit 1
+if ! mount -o bind "$PAK_DIR/res/etc/group" /etc/group; then
+	umount /etc/passwd 2>/dev/null || true
+	exit 1
+fi
+
+if [ ! -f "$HOST_KEY" ]; then
+	"$DROPBEAR" dropbearkey -t ed25519 -f "$HOST_KEY" \
+		> "$SERVICE_LOG" 2>&1 || {
+			umount /etc/passwd 2>/dev/null || true
+			umount /etc/group 2>/dev/null || true
+			exit 1
+		}
+fi
+
+("$DROPBEAR" dropbear -r "$HOST_KEY" -p 22 -F -E \
+	> "$SERVICE_LOG" 2>&1 &) &
+
+sleep 1
+pgrep dropbearmulti >/dev/null 2>&1

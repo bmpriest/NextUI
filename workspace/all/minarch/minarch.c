@@ -329,7 +329,7 @@ int main(int argc , char* argv[]) {
 		hdmimon();
 	}
 	int cw, ch;
-	unsigned char* pixels = GFX_GL_screenCapture(&cw, &ch);
+	unsigned char* pixels = GFX_GL_exitCapture(&cw, &ch);
 	
 	renderer.dst = pixels;
 	SDL_Surface* rawSurface = SDL_CreateRGBSurfaceWithFormatFrom(

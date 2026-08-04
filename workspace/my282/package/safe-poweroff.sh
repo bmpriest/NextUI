@@ -31,23 +31,43 @@ for fd in /proc/$$/fd/[3-9] /proc/$$/fd/[1-9][0-9]*; do
 	eval "exec ${fd##*/}>&-" 2>/dev/null
 done
 
-# Stop any remaining process that still owns an SD-card file. A lazy unmount
-# followed immediately by poweroff can leave FAT writes outstanding and was
-# the likely source of the repeatable dirty/read-only mounts.
-for pidpath in /proc/[0-9]*; do
-	pid="${pidpath#/proc/}"
-	[ "$pid" -gt 1 ] 2>/dev/null || continue
-	[ "$pid" = "$$" ] && continue
+# Stop any remaining process that owns the SD card. Checking descriptors alone
+# is insufficient: Dropbear, keymon, and launcher children can retain an
+# executable mapping or working directory on the card after their descriptors
+# close, which leaves a read-only remount safe but makes the final unmount busy.
+process_uses_sd() {
+	pidpath="$1"
+
+	for ref in cwd root exe; do
+		target="$(readlink "$pidpath/$ref" 2>/dev/null)" || continue
+		case "$target" in
+			"$SDCARD_PATH"|"$SDCARD_PATH"/*) return 0 ;;
+		esac
+	done
+
 	for fd in "$pidpath"/fd/*; do
 		target="$(readlink "$fd" 2>/dev/null)" || continue
 		case "$target" in
-			"$SDCARD_PATH"/*)
-				kill -9 "$pid" 2>/dev/null
-				break
-				;;
+			"$SDCARD_PATH"|"$SDCARD_PATH"/*) return 0 ;;
 		esac
 	done
-done
+
+	grep -q " $SDCARD_PATH/" "$pidpath/maps" 2>/dev/null && return 0
+	return 1
+}
+
+stop_sd_users() {
+	for pidpath in /proc/[0-9]*; do
+		pid="${pidpath#/proc/}"
+		[ "$pid" -gt 1 ] 2>/dev/null || continue
+		[ "$pid" = "$$" ] && continue
+		if process_uses_sd "$pidpath"; then
+			kill -9 "$pid" 2>/dev/null
+		fi
+	done
+}
+
+stop_sd_users
 
 killall wpa_supplicant 2>/dev/null
 killall udhcpc 2>/dev/null
@@ -55,11 +75,30 @@ killall udhcpc 2>/dev/null
 sleep 1
 sync
 SD_DEV="$(awk -v mp="$SDCARD_PATH" '$2 == mp {print $1; exit}' /proc/mounts)"
+SD_READONLY=0
 if [ -n "$SD_DEV" ]; then
 	mount -o remount,ro "$SD_DEV" "$SDCARD_PATH" 2>/dev/null
+	SD_OPTIONS="$(awk -v mp="$SDCARD_PATH" '$2 == mp {print $4; exit}' /proc/mounts)"
+	case ",$SD_OPTIONS," in
+		*,ro,*) SD_READONLY=1 ;;
+	esac
 fi
 sync
-umount "$SDCARD_PATH" 2>/dev/null
+if ! umount "$SDCARD_PATH" 2>/dev/null; then
+	# A process that was exiting during the first pass may have become visible
+	# only after the remount. Sweep once more and retry by block device because
+	# this A30 BusyBox also requires explicit device arguments for remounts.
+	sleep 1
+	stop_sd_users
+	sync
+	if ! umount "$SD_DEV" 2>/dev/null; then
+		# Spruce uses the same final A30 fallback. Lazy detach is safe here only
+		# because sync and the verified read-only remount prohibit later writes.
+		if [ "$SD_READONLY" -eq 1 ]; then
+			umount -l "$SDCARD_PATH" 2>/dev/null
+		fi
+	fi
+fi
 
 if [ "$ACTION" = "reboot" ]; then
 	reboot

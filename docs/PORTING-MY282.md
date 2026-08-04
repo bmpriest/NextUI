@@ -18,7 +18,7 @@ cores are beta milestones rather than alpha blockers.
 
 ## Current progress
 
-Status as of 2026-07-31, based on live testing on a Miyoo A30 under both
+Status as of 2026-08-03, based on live testing on a Miyoo A30 under both
 Spruce and a standalone NextUI card:
 
 ### Completed and hardware-validated
@@ -106,14 +106,34 @@ Spruce and a standalone NextUI card:
   presents a correctly oriented frame, and uses a logical-FBO screenshot path
   so the normal fade is not vertically inverted. The shared
   `generic_video.c` remains unchanged.
+- Correct separation between standard image capture and the A30 exit fade.
+  Screenshots, the open-menu game background, and newly saved state previews
+  use the generic top-left image orientation, while only the final exit fade
+  uses the unflipped logical-FBO capture required by the portrait presentation
+  path. Hardware testing confirmed upright menu imagery and state previews
+  without regressing the corrected exit transition.
+- Hardware-validated safe shutdown. The `/tmp` second stage releases SSH's
+  passwd bind, stops SD-backed processes, synchronizes writes, and verifies a
+  read-only FAT remount before detaching the card. The A30 keeps an unexplained
+  kernel reference after all visible process holders are gone, so normal
+  unmount reports `EBUSY`; matching Spruce's production ordering, NextUI uses
+  lazy detach only after the read-only state is independently verified. Four
+  instrumented shutdown/reboot cycles mounted the card writable afterward with
+  no FAT dirty/error messages. The final trace showed `/mnt/SDCARD` absent
+  before `poweroff`.
+- Hardware-validated hybrid sleep and suspend-to-RAM. After a five-second test
+  timeout with external power disconnected, the A30 entered the kernel `mem`
+  state, remained asleep until a second Power press, and resumed the game,
+  display, controls, audio, saved mixer level, and Wi-Fi connection. SDL audio
+  is reopened after wake; restoring the saved volume after that reopen avoids
+  the codec's loud default gain. The BSP's `Suspended for 0.000 seconds` message
+  is not a valid residence-time measurement because its monotonic clock stops
+  in suspend; wall-clock timestamps and physical observation confirmed the
+  sustained sleep.
 
 ### Implemented but not yet release-validated
 
 - CPU performance/powersave policy changes.
-- Safe A30 shutdown staged under `/tmp`: sync, leave the SD-card working
-  directory, terminate remaining SD-card users, remount FAT read-only, unmount
-  `/mnt/SDCARD`, then invoke poweroff/reboot. This replaces both the initial
-  direct poweroff and the unsafe lazy-unmount fallback and awaits validation.
 - Remaining direct input combinations, long-press behavior, and power-button
   ownership while Spruce services are not running.
 - Read-only-safe launchers fall back to `/tmp` logs rather than allowing shell
@@ -123,7 +143,6 @@ Spruce and a standalone NextUI card:
 - A cross-compiled MinArch executable with ALSA, saves, compressed states,
   rewind, and inert RetroAchievements stubs for the non-networked alpha.
 - Screenshot behavior beyond the MinArch exit-transition capture path.
-- Suspend/resume and post-wake ALSA recovery.
 
 ### In progress
 
@@ -132,13 +151,12 @@ Spruce and a standalone NextUI card:
   audio, and video validated. Per-core 30-minute sessions, save/state coverage,
   relaunch persistence, rewind constraints, and PS1 long-duration/state tests
   remain before the alpha gate is closed.
-- Phase 3 lifecycle work. Wi-Fi and SSH are hardware-validated; suspend/wake,
-  safe shutdown observation, reconnect testing, and updater integration remain.
+- Phase 3 lifecycle work. Wi-Fi, SSH, shutdown, suspend/wake, post-wake audio,
+  and Wi-Fi reconnection are hardware-validated; updater integration remains.
 
 ### Not started
 
 - Update/install flow beyond deploying the pre-expanded standalone card tree.
-- Suspend/resume with post-wake audio recovery.
 - RetroAchievements integration and validation.
 - Full core test matrix, long-duration play tests, and release documentation.
 
@@ -152,6 +170,10 @@ Spruce and a standalone NextUI card:
   backend scan operation interruptible; this is not an A30 release blocker.
 - Add a visible progress/cancel affordance for full-path core extraction of
   large ZIP archives, especially PS1 images.
+- A suspend/resume cycle can produce one or two recoverable ALSA underruns and
+  a brief isolated gameplay stutter a few seconds after wake. Audio and
+  performance then remain normal. Revisit buffer priming only if longer tests
+  show repeated underruns or sustained disruption.
 
 ## Sources of truth
 
@@ -258,9 +280,9 @@ working ES2 context or a working accelerated SDL renderer.
 
 ### Phase 1: frontend bring-up
 
-Status: **functionally validated on a standalone cold-boot card**. Shutdown
-safety observation and repeated lifecycle testing remain before the gate is
-fully closed.
+Status: **complete on a standalone cold-boot card**. Menu navigation, hardware
+adjustments, repeated game/frontend transitions, and instrumented safe
+shutdown are hardware-validated.
 
 - Add build/package skeleton.
 - Implement basic settings and hardware controls.

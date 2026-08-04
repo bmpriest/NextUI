@@ -153,6 +153,13 @@ enum
 #define AXIS_RY	AXIS_NA
 #endif 
 
+#ifndef HAS_LEFT_ANALOG
+#define HAS_LEFT_ANALOG (AXIS_LX != AXIS_NA && AXIS_LY != AXIS_NA)
+#endif
+#ifndef HAS_RIGHT_ANALOG
+#define HAS_RIGHT_ANALOG (AXIS_RX != AXIS_NA && AXIS_RY != AXIS_NA)
+#endif
+
 #ifndef HAS_HDMI
 #define HDMI_WIDTH	FIXED_WIDTH
 #define HDMI_HEIGHT	FIXED_HEIGHT

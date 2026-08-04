@@ -72,6 +72,8 @@ int main(int argc , char* argv[]) {
 	int has_R2 = (BUTTON_R2!=BUTTON_NA || CODE_R2!=CODE_NA || JOY_R2!=JOY_NA || AXIS_R2!=AXIS_NA);
 	int has_L3 = (BUTTON_L3!=BUTTON_NA || CODE_L3!=CODE_NA || JOY_L3!=JOY_NA);
 	int has_R3 = (BUTTON_R3!=BUTTON_NA || CODE_R3!=CODE_NA || JOY_R3!=JOY_NA);
+	int has_lstick = HAS_LEFT_ANALOG || has_L3;
+	int has_rstick = HAS_RIGHT_ANALOG || has_R3;
 	int has_L4 = (BUTTON_L4!=BUTTON_NA || CODE_L4!=CODE_NA || JOY_L4!=JOY_NA);
 	int has_R4 = (BUTTON_R4!=BUTTON_NA || CODE_R4!=CODE_NA || JOY_R4!=JOY_NA);
 
@@ -81,7 +83,7 @@ int main(int argc , char* argv[]) {
 	int has_both = (has_power && has_menu);
 	
 	int oy = SCALE1(PADDING);
-	if (!has_L3 && !has_R3) oy += SCALE1(PILL_SIZE);
+	if (!has_lstick && !has_rstick) oy += SCALE1(PILL_SIZE);
 	
 	SDL_Event event;
 	int quit = 0;
@@ -276,7 +278,7 @@ int main(int argc , char* argv[]) {
 			}
 			
 			// L3
-			if (has_L3) {
+			if (has_lstick) {
 				int x = SCALE1(PADDING + PILL_SIZE);
 				int y = oy + SCALE1(PILL_SIZE*6);
 				int o = SCALE1(BUTTON_MARGIN);
@@ -288,11 +290,11 @@ int main(int argc , char* argv[]) {
 				fillCircle(screen, cx, cy, radius, THEME_COLOR2);
 				int dx = MAX(-travel, MIN(travel, (pad.laxis.x * travel) / STICK_AXIS_MAX));
 				int dy = MAX(-travel, MIN(travel, (pad.laxis.y * travel) / STICK_AXIS_MAX));
-				blitButton("L3", screen, PAD_isPressed(BTN_L3), x + o + dx, y + o + dy, 0);
+				blitButton(has_L3 ? "L3" : "L", screen, has_L3 && PAD_isPressed(BTN_L3), x + o + dx, y + o + dy, 0);
 			}
 			
 			// R3
-			if (has_R3) {
+			if (has_rstick) {
 				int x = FIXED_WIDTH - SCALE1(PADDING + PILL_SIZE * 3) + SCALE1(PILL_SIZE);
 				int y = oy + SCALE1(PILL_SIZE*6);
 				int o = SCALE1(BUTTON_MARGIN);
@@ -304,7 +306,7 @@ int main(int argc , char* argv[]) {
 				fillCircle(screen, cx, cy, radius, THEME_COLOR2);
 				int dx = MAX(-travel, MIN(travel, (pad.raxis.x * travel) / STICK_AXIS_MAX));
 				int dy = MAX(-travel, MIN(travel, (pad.raxis.y * travel) / STICK_AXIS_MAX));
-				blitButton("R3", screen, PAD_isPressed(BTN_R3), x+o+dx, y+o+dy,0);
+				blitButton(has_R3 ? "R3" : "R", screen, has_R3 && PAD_isPressed(BTN_R3), x+o+dx, y+o+dy,0);
 			}
 
 			GFX_flip(screen);

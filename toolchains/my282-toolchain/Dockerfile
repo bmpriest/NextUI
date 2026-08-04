@@ -104,5 +104,24 @@ RUN wget -qO /tmp/lz4.tar.gz \
         CC=${CC} PREFIX=${PREFIX_LOCAL} BUILD_SHARED=yes install \
     && rm -rf /tmp/lz4-1.10.0 /tmp/lz4.tar.gz
 
+# Game Tracker and Battery use SQLite databases. The stock A30 firmware does
+# not provide a 32-bit libsqlite3, so build and package a standalone copy.
+ARG SQLITE_VERSION=3530400
+ARG SQLITE_SHA3=454e45f61c6bd75b7420e7190732dea03ce6639c63ada47bbc592f67fc340338
+RUN wget -qO /tmp/sqlite.tar.gz \
+        https://www.sqlite.org/2026/sqlite-autoconf-${SQLITE_VERSION}.tar.gz \
+    && python3 -c "import hashlib; p='/tmp/sqlite.tar.gz'; expected='${SQLITE_SHA3}'; actual=hashlib.sha3_256(open(p,'rb').read()).hexdigest(); assert actual == expected, (actual, expected)" \
+    && tar xzf /tmp/sqlite.tar.gz -C /tmp \
+    && cd /tmp/sqlite-autoconf-${SQLITE_VERSION} \
+    && ./configure \
+        --host=${CROSS_TRIPLE} \
+        --prefix=${PREFIX_LOCAL} \
+        --disable-static \
+        --enable-shared \
+        --disable-readline \
+    && make -j"$(nproc)" \
+    && make install \
+    && rm -rf /tmp/sqlite-autoconf-${SQLITE_VERSION} /tmp/sqlite.tar.gz
+
 VOLUME /root/workspace
 WORKDIR /root/workspace

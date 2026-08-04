@@ -39,6 +39,7 @@ fi
 killall joypad joystickinput 2>/dev/null
 
 KEYMON_PID=""
+BATMON_PID=""
 run_logged() {
 	LOG_FILE="$1"
 	TMP_LOG="$2"
@@ -50,13 +51,17 @@ run_logged() {
 	fi
 }
 
-cleanup_keymon() {
+cleanup_daemons() {
+	if [ -n "$BATMON_PID" ]; then
+		kill -TERM "$BATMON_PID" 2>/dev/null
+		wait "$BATMON_PID" 2>/dev/null
+	fi
 	if [ -n "$KEYMON_PID" ]; then
 		kill -TERM "$KEYMON_PID" 2>/dev/null
 		wait "$KEYMON_PID" 2>/dev/null
 	fi
 }
-trap cleanup_keymon EXIT
+trap cleanup_daemons EXIT
 trap 'exit 0' HUP INT TERM
 
 if ( : > "$LOGS_PATH/keymon.txt" ) 2>/dev/null; then
@@ -65,6 +70,20 @@ else
 	"$SYSTEM_PATH/bin/keymon.elf" > /tmp/nextui-keymon.txt 2>&1 &
 fi
 KEYMON_PID=$!
+
+if ( : > "$LOGS_PATH/batmon.txt" ) 2>/dev/null; then
+	"$SYSTEM_PATH/bin/batmon.elf" > "$LOGS_PATH/batmon.txt" 2>&1 &
+else
+	"$SYSTEM_PATH/bin/batmon.elf" > /tmp/nextui-batmon.txt 2>&1 &
+fi
+BATMON_PID=$!
+
+# Support composable service hooks used by maintained MinUI/NextUI paks such
+# as SSH Server's optional start-on-boot setting.
+AUTO_PATH="$USERDATA_PATH/auto.sh"
+if [ -f "$AUTO_PATH" ]; then
+	"$AUTO_PATH"
+fi
 
 EXEC_PATH="/tmp/nextui_exec"
 NEXT_PATH="/tmp/next"

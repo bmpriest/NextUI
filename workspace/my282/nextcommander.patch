@@ -1,0 +1,392 @@
+diff --git a/Makefile b/Makefile
+index dbf0750..618b0ea 100644
+--- a/Makefile
++++ b/Makefile
+@@ -82,6 +82,38 @@ CXXFLAGS += -DAUTOSCALE_DPI=1
+ CXXFLAGS += -DPPU_X=3
+ CXXFLAGS += -DPPU_Y=3
+ CXXFLAGS += -DSCREEN_BPP=32
++
++# platform dependant stuff - my282 (Miyoo A30)
++else ifneq (,$(findstring my282,$(PLATFORM)))
++SDCARD_ROOT := /mnt/SDCARD
++NEXTUI_SYSTEM_PATH := $(SDCARD_ROOT)/.system
++
++CXXFLAGS += -DPATH_DEFAULT=\"$(SDCARD_ROOT)\"
++CXXFLAGS += -DPATH_DEFAULT_RIGHT=\"$(SDCARD_ROOT)\"
++CXXFLAGS += -DFILE_SYSTEM=\"/dev/mmcblk0p1\"
++CXXFLAGS += -DMY282
++CXXFLAGS += -DIGNORE_KEYDOWN=1
++CXXFLAGS += -std=gnu++11 -include cstdint
++
++CXXFLAGS += -DCMDR_KEY_UP=SDLK_UP
++CXXFLAGS += -DCMDR_KEY_RIGHT=SDLK_RIGHT
++CXXFLAGS += -DCMDR_KEY_DOWN=SDLK_DOWN
++CXXFLAGS += -DCMDR_KEY_LEFT=SDLK_LEFT
++CXXFLAGS += -DCMDR_KEY_OPEN=SDLK_RETURN
++CXXFLAGS += -DCMDR_KEY_PARENT=SDLK_BACKSPACE
++CXXFLAGS += -DCMDR_KEY_OPERATION=SDLK_SPACE
++CXXFLAGS += -DCMDR_KEY_SYSTEM=SDLK_ESCAPE
++CXXFLAGS += -DCMDR_KEY_PAGEUP=SDLK_PAGEUP
++CXXFLAGS += -DCMDR_KEY_PAGEDOWN=SDLK_PAGEDOWN
++CXXFLAGS += -DCMDR_KEY_SELECT=SDLK_INSERT
++CXXFLAGS += -DCMDR_KEY_TRANSFER=SDLK_TAB
++CXXFLAGS += -DCMDR_KEY_MENU=SDLK_ESCAPE
++
++CXXFLAGS += -DAUTOSCALE=0
++CXXFLAGS += -DAUTOSCALE_DPI=0
++CXXFLAGS += -DPPU_X=2
++CXXFLAGS += -DPPU_Y=2
++CXXFLAGS += -DSCREEN_BPP=32
+ endif
+ 
+ SDL := SDL2
+@@ -102,5 +134,8 @@ LINKFLAGS += -s
+ LINKFLAGS += -s
++ifeq ($(PLATFORM),my282)
++LINKFLAGS += -static-libstdc++ -static-libgcc
++endif
+ LINKFLAGS += -l$(SDL) -l$(SDL)_image -l$(SDL)_ttf
+ ifeq ($(PLATFORM),miyoomini)
+ LINKFLAGS += -lmi_sys -lmi_gfx
+ endif
+@@ -115,6 +150,9 @@ EXECUTABLE := $(OUTDIR)/NextCommander
+ OBJS :=	main.o commander.o config.o dialog.o fileLister.o fileutils.o keyboard.o panel.o resourceManager.o \
+ 	screen.o sdl_ttf_multifont.o sdlutils.o text_edit.o utf8.o text_viewer.o image_viewer.o  window.o \
+ 	sdl_gfx/$(SDL)_rotozoom.o
++ifeq ($(PLATFORM),my282)
++OBJS += my282_input.o
++endif
+ ifeq ($(PLATFORM),miyoomini)
+ OBJS += gfx.o
+ endif
+diff --git a/src/my282_input.cpp b/src/my282_input.cpp
+new file mode 100644
+index 0000000..b0d38e7
+--- /dev/null
++++ b/src/my282_input.cpp
+@@ -0,0 +1,56 @@
++#include "my282_input.h"
++
++#include <cerrno>
++#include <fcntl.h>
++#include <linux/input.h>
++#include <unistd.h>
++
++#include "config_def.h"
++
++namespace {
++
++int inputFd()
++{
++    static int fd = -2;
++    if (fd == -2)
++        fd = open("/dev/input/event3", O_RDONLY | O_NONBLOCK | O_CLOEXEC);
++    return fd;
++}
++
++SDL_Keycode mapKey(unsigned short code)
++{
++    switch (code) {
++        case 103: return CMDR_KEY_UP;
++        case 108: return CMDR_KEY_DOWN;
++        case 105: return CMDR_KEY_LEFT;
++        case 106: return CMDR_KEY_RIGHT;
++        case 57: return CMDR_KEY_OPEN;
++        case 29: return CMDR_KEY_PARENT;
++        case 42: return CMDR_KEY_OPERATION;
++        case 56: return CMDR_KEY_SYSTEM;
++        case 15: return CMDR_KEY_PAGEUP;
++        case 14: return CMDR_KEY_PAGEDOWN;
++        case 97: return CMDR_KEY_SELECT;
++        case 28: return CMDR_KEY_TRANSFER;
++        case 1: return CMDR_KEY_SYSTEM;
++        default: return SDLK_UNKNOWN;
++    }
++}
++
++} // namespace
++
++bool pollMy282Key(SDL_Keycode *key)
++{
++    const int fd = inputFd();
++    if (fd < 0) return false;
++
++    input_event event{};
++    while (read(fd, &event, sizeof(event)) == sizeof(event)) {
++        if (event.type != EV_KEY || event.value == 0) continue;
++        const SDL_Keycode mapped = mapKey(event.code);
++        if (mapped == SDLK_UNKNOWN) continue;
++        *key = mapped;
++        return true;
++    }
++    return false;
++}
+diff --git a/src/my282_input.h b/src/my282_input.h
+new file mode 100644
+index 0000000..0fd1df5
+--- /dev/null
++++ b/src/my282_input.h
+@@ -0,0 +1,8 @@
++#ifndef MY282_INPUT_H
++#define MY282_INPUT_H
++
++#include <SDL.h>
++
++bool pollMy282Key(SDL_Keycode *key);
++
++#endif
+diff --git a/src/screen.cpp b/src/screen.cpp
+index 43d31fa..0799430 100644
+--- a/src/screen.cpp
++++ b/src/screen.cpp
+@@ -4,12 +4,50 @@
+ #include <cstdint>
+ #include <cstdio>
+ 
++#ifdef MY282
++#include <fcntl.h>
++#include <linux/fb.h>
++#include <sys/ioctl.h>
++#include <unistd.h>
++#endif
++
+ #include "sdlutils.h"
+ 
+ Screen screen;
+ 
+ namespace {
+ 
++#ifdef MY282
++constexpr const char *A30_BACKLIGHT_PATH
++    = "/sys/devices/virtual/disp/disp/attr/lcdbl";
++constexpr const char *A30_BACKLIGHT_HANDOFF = "/tmp/nextui-backlight";
++
++void restoreA30Backlight()
++{
++    FILE *handoff = std::fopen(A30_BACKLIGHT_HANDOFF, "r");
++    if (handoff == nullptr) return;
++
++    int raw = 0;
++    const bool valid = std::fscanf(handoff, "%d", &raw) == 1 && raw > 0;
++    std::fclose(handoff);
++    std::remove(A30_BACKLIGHT_HANDOFF);
++    if (!valid) return;
++
++    FILE *backlight = std::fopen(A30_BACKLIGHT_PATH, "w");
++    if (backlight == nullptr) return;
++    std::fprintf(backlight, "%d", raw);
++    std::fclose(backlight);
++}
++
++void unblankA30Framebuffer()
++{
++    const int fd = open("/dev/fb0", O_RDWR | O_CLOEXEC);
++    if (fd < 0) return;
++    ioctl(fd, FBIOBLANK, FB_BLANK_UNBLANK);
++    close(fd);
++}
++#endif
++
+ #ifndef USE_SDL2
+ SDL_Surface *SetVideoMode(int width, int height, int bpp, std::uint32_t flags)
+ {
+@@ -75,6 +113,49 @@ int Screen::init()
+ #endif
+ 
+ #ifdef USE_SDL2
++#ifdef MY282
++    // The A30's Mali framebuffer is physically 480x640. Keep the file
++    // manager's drawing surface in logical 640x480 orientation and rotate it
++    // only when presenting to the panel.
++    SDL_SetHint(SDL_HINT_RENDER_DRIVER, "opengl");
++    SDL_SetHint(SDL_HINT_FRAMEBUFFER_ACCELERATION, "1");
++    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,
++        SDL_GL_CONTEXT_PROFILE_ES);
++    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
++    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
++    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
++    window = SDL_CreateWindow("Commander", SDL_WINDOWPOS_UNDEFINED,
++        SDL_WINDOWPOS_UNDEFINED, screen.actual_h, screen.actual_w,
++        SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN);
++    if (window == nullptr) {
++        SDL_Log("Failed to create A30 window: %s", SDL_GetError());
++        return 1;
++    }
++    renderer = SDL_CreateRenderer(window, -1,
++        SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
++    if (renderer == nullptr) {
++        SDL_Log("Failed to create A30 renderer: %s", SDL_GetError());
++        return 1;
++    }
++    SDL_RendererInfo rendererInfo{};
++    SDL_GetRendererInfo(renderer, &rendererInfo);
++    int outputW = 0;
++    int outputH = 0;
++    SDL_GetRendererOutputSize(renderer, &outputW, &outputH);
++    SDL_Log("A30 renderer=%s output=%dx%d",
++        rendererInfo.name, outputW, outputH);
++    texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
++        SDL_TEXTUREACCESS_STREAMING, screen.actual_w, screen.actual_h);
++    composite = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888,
++        SDL_TEXTUREACCESS_TARGET, screen.actual_w, screen.actual_h);
++    surface = SDL_CreateRGBSurfaceWithFormat(0, screen.actual_w,
++        screen.actual_h, 32, SDL_PIXELFORMAT_ARGB8888);
++    if (texture == nullptr || composite == nullptr || surface == nullptr) {
++        SDL_Log("Failed to create A30 presentation surface: %s",
++            SDL_GetError());
++        return 1;
++    }
++#else
+     int window_flags = SDL_WINDOW_RESIZABLE;
+     if (cfg.disp_autoscale) window_flags |= SDL_WINDOW_MAXIMIZED;
+ 
+@@ -108,6 +189,7 @@ int Screen::init()
+     SDL_GetWindowSize(window, &window_w, &window_h);
+     setPhysicalResolution(window_w, window_h);
+     screen.surface = SDL_GetWindowSurface(window);
++#endif
+ #else
+     surface = SetVideoMode(screen.actual_w, screen.actual_h, SCREEN_BPP,
+         SDL_SWSURFACE | SDL_RESIZABLE);
+@@ -122,8 +204,14 @@ int Screen::init()
+ int Screen::onResize(int w, int h)
+ {
+ #ifdef USE_SDL2
++#ifdef MY282
++    // mali-fbdev has one fixed physical mode; logical sizing is handled by
++    // the offscreen surface above.
++    return 0;
++#else
+     this->surface = SDL_GetWindowSurface(this->window);
+     setPhysicalResolution(surface->w, surface->h);
++#endif
+ #else
+ #ifndef MIYOOMINI
+     this->surface = SDL_GetVideoSurface();
+@@ -137,6 +225,59 @@ int Screen::onResize(int w, int h)
+     return 0;
+ }
+ 
++#ifdef MY282
++void Screen::flip()
++{
++    if (SDL_UpdateTexture(texture, nullptr, surface->pixels, surface->pitch)
++        < 0) {
++        SDL_Log("Failed to upload A30 frame: %s", SDL_GetError());
++        return;
++    }
++
++    if (SDL_SetRenderTarget(renderer, composite) < 0) {
++        SDL_Log("Failed to select A30 composition target: %s",
++            SDL_GetError());
++        return;
++    }
++    SDL_RenderSetScale(renderer, 1.0f, 1.0f);
++    const SDL_Rect logicalViewport = {0, 0, actual_w, actual_h};
++    SDL_RenderSetViewport(renderer, &logicalViewport);
++    SDL_RenderSetClipRect(renderer, nullptr);
++    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
++    SDL_RenderClear(renderer);
++    if (SDL_RenderCopy(renderer, texture, nullptr, nullptr) < 0) {
++        SDL_Log("Failed to compose A30 frame: %s", SDL_GetError());
++        return;
++    }
++
++    if (SDL_SetRenderTarget(renderer, nullptr) < 0) {
++        SDL_Log("Failed to select A30 scanout target: %s", SDL_GetError());
++        return;
++    }
++    SDL_RenderSetScale(renderer, 1.0f, 1.0f);
++    const SDL_Rect viewport = {0, 0, actual_h, actual_w};
++    SDL_RenderSetViewport(renderer, &viewport);
++    SDL_RenderSetClipRect(renderer, nullptr);
++    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
++    SDL_RenderClear(renderer);
++
++    SDL_Vertex vertices[] = {
++        {{0.0f,             0.0f},              {255,255,255,255}, {1.0f, 0.0f}},
++        {{(float)actual_h,  0.0f},              {255,255,255,255}, {1.0f, 1.0f}},
++        {{0.0f,             (float)actual_w},   {255,255,255,255}, {0.0f, 0.0f}},
++        {{(float)actual_h,  (float)actual_w},   {255,255,255,255}, {0.0f, 1.0f}},
++    };
++    static const int indices[] = {0, 1, 2, 1, 3, 2};
++    if (SDL_RenderGeometry(renderer, composite, vertices, 4, indices, 6) < 0) {
++        SDL_Log("Failed to present A30 frame: %s", SDL_GetError());
++        return;
++    }
++    SDL_RenderPresent(renderer);
++    unblankA30Framebuffer();
++    restoreA30Backlight();
++}
++#endif
++
+ void Screen::setPhysicalResolution(int actual_w, int actual_h)
+ {
+     this->actual_w = actual_w;
+diff --git a/src/screen.h b/src/screen.h
+index 5249165..dd7752b 100644
+--- a/src/screen.h
++++ b/src/screen.h
+@@ -29,9 +29,17 @@ struct Screen
+     SDL_Surface *surface;
+ 
+ #ifdef USE_SDL2
+-    SDL_Window *window;
++	SDL_Window *window;
++#ifdef MY282
++	SDL_Renderer *renderer;
++	SDL_Texture *texture;
++	SDL_Texture *composite;
++#endif
+ #endif
+ 
++#ifdef MY282
++    void flip();
++#else
+     void flip() {
+ #ifdef USE_SDL2
+ 		if (SDL_UpdateWindowSurface(window) <= -1) {
+@@ -47,6 +55,7 @@ struct Screen
+ #endif
+ #endif
+     }
++#endif
+ 
+     // Called once at startup.
+     int init();
+diff --git a/src/window.cpp b/src/window.cpp
+index d48c309..060247e 100644
+--- a/src/window.cpp
++++ b/src/window.cpp
+@@ -7,6 +7,9 @@
+ #include "resourceManager.h"
+ #include "screen.h"
+ #include "sdlutils.h"
++#ifdef MY282
++#include "my282_input.h"
++#endif
+ 
+ #define KEYHOLD_TIMER_FIRST   12
+ #define KEYHOLD_TIMER         3
+@@ -65,6 +68,20 @@ int CWindow::execute()
+     // Main loop
+     while (l_loop)
+     {
++#ifdef MY282
++        SDL_Keycode my282_key;
++        while (pollMy282Key(&my282_key)) {
++            SDL_Event key_event{};
++            key_event.type = SDL_KEYDOWN;
++            key_event.key.keysym.sym = my282_key;
++            SDL_utils::setMouseCursorEnabled(false);
++            l_render = this->keyPress(key_event) || l_render;
++            if (m_retVal) {
++                l_loop = false;
++                break;
++            }
++        }
++#endif
+         // Handle key press
+         while (SDL_PollEvent(&event))
+         {

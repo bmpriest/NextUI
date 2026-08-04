@@ -4309,12 +4309,19 @@ static void PWR_exitSleep(void)
 			VIB_singlePulse(VIB_sleepStrength, VIB_sleepDuration_ms);
 		}
 		PLAT_enableBacklight(1);
-		SND_overrideMute(1);
-		SetVolume(GetVolume());
 	}
 	// reinitialize audio after sleep otherwise it doesnt come back on sometimes
 	LOG_info("Reinitialize audio after sleep\n");
 	SND_resetAudio(snd.sample_rate_in, snd.frame_rate);
+
+	// Opening the audio device may reset the hardware mixer. Restore the saved
+	// level only after the device has been reopened so wake does not briefly use
+	// the codec's default volume.
+	if (!GetHDMI())
+	{
+		SND_overrideMute(1);
+		SetVolume(GetVolume());
+	}
 
 	sync();
 }
@@ -4746,6 +4753,11 @@ FALLBACK_IMPLEMENTATION bool PLAT_wifiDiagnosticsEnabled() { return false; }
 FALLBACK_IMPLEMENTATION void PLAT_wifiDiagnosticsEnable(bool on) {}
 
 FALLBACK_IMPLEMENTATION void PLAT_prepareForProcessExit(void) {}
+
+FALLBACK_IMPLEMENTATION unsigned char *PLAT_GL_exitCapture(int *outWidth, int *outHeight)
+{
+	return PLAT_GL_screenCapture(outWidth, outHeight);
+}
 
 /////////////////////////////////////////////////////////////////////////////////////////
 

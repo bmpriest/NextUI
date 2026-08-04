@@ -124,6 +124,11 @@ extern int is_brickpro;
 #define AXIS_RX			3 // ABS_RX, -30k (left) to 30k (right)
 #define AXIS_RY			4 // ABS_RY, -30k (up) to 30k (down)
 
+// Smart Pro and Brick Pro have two analog sticks. The original Brick shares
+// this platform and its input axis definitions, but has no physical sticks.
+#define HAS_LEFT_ANALOG	(!is_brick)
+#define HAS_RIGHT_ANALOG	(!is_brick)
+
 ///////////////////////////////
 
 #define BTN_RESUME			BTN_X

@@ -386,11 +386,13 @@ int __db_get_active_closed_activity(sqlite3* game_log_db)
         return ROM_NOT_FOUND;
     }
 
-    char *sql = sqlite3_mprintf("SELECT * FROM play_activity WHERE rom_id = %d AND play_time IS NULL;", rom_id);
+    char *sql = sqlite3_mprintf(
+        "SELECT play_time FROM play_activity WHERE rom_id = %d ORDER BY ROWID DESC LIMIT 1;",
+        rom_id);
     sqlite3_stmt *stmt = play_activity_db_prepare(game_log_db, sql);
 
-    if (sqlite3_step(stmt) == SQLITE_ROW) {
-        // Activity is not closed
+    if (sqlite3_step(stmt) != SQLITE_ROW || sqlite3_column_type(stmt, 0) == SQLITE_NULL) {
+        // No previous activity, or the latest activity is already open.
         rom_id = ROM_NOT_FOUND;
     }
 
@@ -422,7 +424,17 @@ void play_activity_resume(void)
         printf("Error: no active rom\n");
         exit(1);
     }
-    char *sql = sqlite3_mprintf("INSERT INTO play_activity(rom_id) VALUES(%d);", rom_id);
+    // Reopen the activity closed by stop_all() before sleep. Backdating
+    // created_at by the already-recorded play time preserves that duration,
+    // excludes time spent asleep, and keeps the session as one play.
+    char *sql = sqlite3_mprintf(
+        "UPDATE play_activity "
+        "SET created_at = (strftime('%%s', 'now')) - play_time, "
+        "play_time = NULL, updated_at = NULL "
+        "WHERE ROWID = (SELECT ROWID FROM play_activity "
+        "WHERE rom_id = %d AND play_time IS NOT NULL "
+        "ORDER BY ROWID DESC LIMIT 1);",
+        rom_id);
     play_activity_db_execute(sql);
     sqlite3_free(sql);
 }

@@ -12,17 +12,24 @@ log() {
 	echo "$*" >> "$LOG"
 }
 
+is_dropbear_pid() {
+	PID="$1"
+	case "$PID" in
+		*[!0-9]*|'') return 1 ;;
+	esac
+	[ -e "/proc/$PID/exe" ] || return 1
+	case "$(readlink "/proc/$PID/exe" 2>/dev/null)" in
+		*/dropbearmulti) return 0 ;;
+	esac
+	return 1
+}
+
 stop_ssh() {
 	if [ -f "$PID_FILE" ]; then
 		PID="$(cat "$PID_FILE" 2>/dev/null)"
-		case "$PID" in
-			*[!0-9]*|'') ;;
-			*)
-				if [ -e "/proc/$PID/exe" ]; then
-					kill "$PID" 2>/dev/null
-				fi
-				;;
-		esac
+		if is_dropbear_pid "$PID"; then
+			kill "$PID" 2>/dev/null
+		fi
 		rm -f "$PID_FILE"
 	fi
 
@@ -35,10 +42,11 @@ stop_ssh() {
 
 if [ -f "$PID_FILE" ]; then
 	PID="$(cat "$PID_FILE" 2>/dev/null)"
-	if [ -n "$PID" ] && [ -e "/proc/$PID/exe" ]; then
+	if is_dropbear_pid "$PID"; then
 		stop_ssh
 		exit 0
 	fi
+	log "Discarding stale SSH pid file ($PID)"
 	rm -f "$PID_FILE"
 fi
 
