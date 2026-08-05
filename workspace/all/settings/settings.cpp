@@ -453,6 +453,15 @@ int main(int argc, char *argv[])
             []() -> std::any{ return (int)(CFG_getGameArtWidth() * 100); },
             [](const std::any &value) { CFG_setGameArtWidth((double)std::any_cast<int>(value) / 100.0); },
             []() { CFG_setGameArtWidth(CFG_DEFAULT_GAMEARTWIDTH);}});
+        appearanceItems.push_back(new MenuItem{ListItemType::Generic, "Game art height padding", "Keep game art clear of the top and bottom of the screen.\nTurn off to set the height manually.", {false, true}, on_off,
+            []() -> std::any { return CFG_getGameArtHeightPadding(); },
+            [](const std::any &value) { CFG_setGameArtHeightPadding(std::any_cast<bool>(value)); },
+            []() { CFG_setGameArtHeightPadding(CFG_DEFAULT_GAMEARTHEIGHTPADDING);}});
+        appearanceItems.push_back(new MenuItem{ListItemType::Generic, "Game art height", "Set the percentage of screen height used for game art.\nOnly applies when game art height padding is off.",
+            5, 100, "%",
+            []() -> std::any{ return (int)(CFG_getGameArtHeightRaw() * 100); },
+            [](const std::any &value) { CFG_setGameArtHeightRaw((double)std::any_cast<int>(value) / 100.0); },
+            []() { CFG_setGameArtHeightRaw(CFG_DEFAULT_GAMEARTHEIGHT);}});
         appearanceItems.push_back(new MenuItem{ListItemType::Generic, "Show folder names at root", "Show folder names at root directory", {false, true}, on_off,
             []() -> std::any { return CFG_getShowFolderNamesAtRoot(); },
             [](const std::any &value) { CFG_setShowFolderNamesAtRoot(std::any_cast<bool>(value)); },

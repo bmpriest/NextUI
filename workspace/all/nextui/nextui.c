@@ -1765,7 +1765,6 @@ static SDL_Surface* screen = NULL; // Must be assigned externally
 static SDL_Surface* globalpill = NULL;
 static SDL_Surface* globalText = NULL;
 
-static int had_thumb = 0;
 static int ox;
 static int oy;
 static SDL_atomic_t animationDrawAtomic;
@@ -2014,7 +2013,7 @@ void onThumbLoaded(SDL_Surface* surface) {
 	int img_h = thumbbmp->h;
 	double aspect_ratio = (double)img_h / img_w;
 	int max_w = (int)(screen->w * CFG_getGameArtWidth());
-	int max_h = (int)(screen->h * 0.6);
+	int max_h = (int)(screen->h * CFG_getGameArtHeight());
 	int new_w = max_w;
 	int new_h = (int)(new_w * aspect_ratio);
 
@@ -2656,7 +2655,7 @@ int main (int argc, char *argv[]) {
 				if(lastScreen!=SCREEN_GAMELIST)
 					GFX_clearLayers(LAYER_THUMBNAIL);
 				GFX_clearLayers(LAYER_SCROLLTEXT);
-				GFX_clearLayers(LAYER_IDK2);
+				GFX_clearLayers(LAYER_OVERLAY);
 			}
 			GFX_clear(screen);
 
@@ -3032,18 +3031,7 @@ int main (int argc, char *argv[]) {
 					if(CFG_getShowGameArt()) {
 						char thumbpath[1024];
 						snprintf(thumbpath, sizeof(thumbpath), "%s/.media/%s.png", rompath, res_copy);
-						had_thumb = 0;
 						startLoadThumb(thumbpath, onThumbLoaded, NULL);
-						int max_w = (int)(screen->w - (screen->w * CFG_getGameArtWidth()));
-						int max_h = (int)(screen->h * 0.6);
-						int new_w = max_w;
-						int new_h = max_h;
-						if(exists(thumbpath)) {
-							ox = (int)(max_w) - SCALE1(BUTTON_MARGIN*5);
-							had_thumb = 1;
-						}
-						else
-							ox = screen->w;
 					}
 				}
 
@@ -3079,11 +3067,16 @@ int main (int argc, char *argv[]) {
 						Entry* entry = top->entries->items[i];
 						char* entry_name = entry->name;
 						char* entry_unique = entry->unique;
-						int available_width = MAX(0,(had_thumb ? ox + SCALE1(BUTTON_MARGIN) : screen->w - SCALE1(BUTTON_MARGIN)) - SCALE1(PADDING * 2));
+						// Names are no longer clamped to the space left of the game art;
+						// they run the full width and overlap it. The art renders below
+						// the UI surface, so the text stays legible on top.
+						int available_width = MAX(0,(screen->w - SCALE1(BUTTON_MARGIN)) - SCALE1(PADDING * 2));
 						bool row_is_selected = (j == selected_row);
 						bool row_is_top = (i == top->start);
 						bool row_has_moved = (previous_row != selected_row || previous_depth != stack->count);
-						if (row_is_top && !(had_thumb))
+						// the hardware status pill shares the UI surface, so the top row
+						// still has to yield to it
+						if (row_is_top)
 							available_width -= ow;
 
 						trimSortingMeta(&entry_name);
@@ -3139,7 +3132,10 @@ int main (int argc, char *argv[]) {
 						SDL_Rect text_rect = { 0, 0, max_width - SCALE1(BUTTON_PADDING*2), text->h };
 						SDL_Rect dest_rect = { SCALE1(BUTTON_MARGIN + BUTTON_PADDING), SCALE1(PADDING + (j * PILL_SIZE)) + text_offset_y };
 
-						if(list_show_entry_names) {
+						// While the selected row scrolls, the scroll text layer owns its name.
+						// Drawing it here as well would leave a static copy showing through
+						// underneath the moving one.
+						if(list_show_entry_names && !(row_is_selected && is_scrolling)) {
 							SDL_BlitSurface(text_unique, &text_rect, screen, &dest_rect);
 							SDL_BlitSurface(text, &text_rect, screen, &dest_rect);
 						}
@@ -3203,10 +3199,10 @@ int main (int argc, char *argv[]) {
 						int _duration = (CFG_getMenuTransitions() == TRANSITION_COMFY)
 							? TRANSITION_COMFY_DURATION
 							: TRANSITION_SNAPPY_DURATION;
-						if(animationdirection == SLIDE_LEFT) GFX_animateAndFadeSurface(tmpOldScreen,0,0,-250,0,FIXED_WIDTH,FIXED_HEIGHT,_duration,tmpNewScreen,FIXED_WIDTH,0,0,0,FIXED_WIDTH,FIXED_HEIGHT,255,255,LAYER_THUMBNAIL,TRANSITION_CURVE,TRANSITION_CURVE,TRANSITION_INTENSITY);
-						if(animationdirection == SLIDE_RIGHT) GFX_animateAndFadeSurface(tmpNewScreen,-250,0,0,0,FIXED_WIDTH,FIXED_HEIGHT,_duration,tmpOldScreen,0,0,FIXED_WIDTH,0,FIXED_WIDTH,FIXED_HEIGHT,255,255,LAYER_THUMBNAIL,TRANSITION_CURVE,TRANSITION_CURVE,TRANSITION_INTENSITY);
+						if(animationdirection == SLIDE_LEFT) GFX_animateAndFadeSurface(tmpOldScreen,0,0,-250,0,FIXED_WIDTH,FIXED_HEIGHT,_duration,tmpNewScreen,FIXED_WIDTH,0,0,0,FIXED_WIDTH,FIXED_HEIGHT,255,255,LAYER_OVERLAY,TRANSITION_CURVE,TRANSITION_CURVE,TRANSITION_INTENSITY);
+						if(animationdirection == SLIDE_RIGHT) GFX_animateAndFadeSurface(tmpNewScreen,-250,0,0,0,FIXED_WIDTH,FIXED_HEIGHT,_duration,tmpOldScreen,0,0,FIXED_WIDTH,0,FIXED_WIDTH,FIXED_HEIGHT,255,255,LAYER_OVERLAY,TRANSITION_CURVE,TRANSITION_CURVE,TRANSITION_INTENSITY);
 					}
-					GFX_clearLayers(LAYER_THUMBNAIL);
+					GFX_clearLayers(LAYER_OVERLAY);
 					SDL_FreeSurface(tmpNewScreen);
 				}
 				// animation done
@@ -3242,7 +3238,7 @@ int main (int argc, char *argv[]) {
 					int img_h = thumbbmp->h;
 					double aspect_ratio = (double)img_h / img_w;
 					int max_w = (int)(screen->w * CFG_getGameArtWidth());
-					int max_h = (int)(screen->h * 0.6);
+					int max_h = (int)(screen->h * CFG_getGameArtHeight());
 					int new_w = max_w;
 					int new_h = (int)(new_w * aspect_ratio);
 
@@ -3251,7 +3247,8 @@ int main (int argc, char *argv[]) {
 						new_w = (int)(new_h / aspect_ratio);
 					}
 
-					int target_x = screen->w-(new_w + SCALE1(BUTTON_MARGIN*3));
+					// with height padding off the art runs flush to the right edge
+					int target_x = screen->w - new_w - (CFG_getGameArtHeightPadding() ? SCALE1(BUTTON_MARGIN*3) : 0);
 					int target_y = (int)(screen->h * 0.50);
 					int center_y = target_y - (new_h / 2); // FIX: use new_h instead of thumbbmp->h
 					GFX_clearLayers(LAYER_THUMBNAIL);
@@ -3297,7 +3294,7 @@ int main (int argc, char *argv[]) {
 				double aspect_ratio = (double)img_h / img_w;
 
 				int max_w = (int)(screen->w * CFG_getGameArtWidth());
-				int max_h = (int)(screen->h * 0.6);
+				int max_h = (int)(screen->h * CFG_getGameArtHeight());
 
 				int new_w = max_w;
 				int new_h = (int)(new_w * aspect_ratio);
@@ -3307,7 +3304,8 @@ int main (int argc, char *argv[]) {
 					new_w = (int)(new_h / aspect_ratio);
 				}
 
-				int target_x = screen->w-(new_w + SCALE1(BUTTON_MARGIN*3));
+				// with height padding off the art runs flush to the right edge
+				int target_x = screen->w - new_w - (CFG_getGameArtHeightPadding() ? SCALE1(BUTTON_MARGIN*3) : 0);
 				int target_y = (int)(screen->h * 0.50);
 				int center_y = target_y - (new_h / 2); // FIX: use new_h instead of thumbbmp->h
 				GFX_clearLayers(LAYER_THUMBNAIL);
@@ -3337,8 +3335,8 @@ int main (int argc, char *argv[]) {
 						entry_text = entry->unique;
 					}
 
-					int available_width = (had_thumb ? ox + SCALE1(BUTTON_MARGIN) : screen->w - SCALE1(BUTTON_MARGIN)) - SCALE1(PADDING * 2);
-					if (top->selected == top->start && !had_thumb) available_width -= ow;
+					int available_width = (screen->w - SCALE1(BUTTON_MARGIN)) - SCALE1(PADDING * 2);
+					if (top->selected == top->start) available_width -= ow;
 
 					SDL_Color text_color = uintToColour(THEME_COLOR5_255);
 

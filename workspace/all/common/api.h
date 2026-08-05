@@ -298,13 +298,16 @@ typedef struct {
 	GLint uniformLocation;
 } ShaderParam;
 
+// Composited back to front in this order, except LAYER_THUMBNAIL which is drawn
+// between LAYER_BACKGROUND and LAYER_TRANSITION so game art can bleed past the
+// list without covering the UI. See composeLayers() in generic_video.c.
 enum {
 	LAYER_ALL = 0,
 	LAYER_BACKGROUND = 1,
 	LAYER_TRANSITION = 2,
 	LAYER_THUMBNAIL = 3,
 	LAYER_SCROLLTEXT = 4,
-	LAYER_IDK2 = 5, // unused?
+	LAYER_OVERLAY = 5, // full-screen animations that must cover the UI
 };
 
 SDL_Surface* GFX_init(int mode);

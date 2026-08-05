@@ -42,6 +42,8 @@ void CFG_defaults(NextUISettings *cfg)
         .color7_255 = CFG_DEFAULT_COLOR7,
         .thumbRadius = CFG_DEFAULT_THUMBRADIUS,
         .gameArtWidth = CFG_DEFAULT_GAMEARTWIDTH,
+        .gameArtHeight = CFG_DEFAULT_GAMEARTHEIGHT,
+        .gameArtHeightPadding = CFG_DEFAULT_GAMEARTHEIGHTPADDING,
 		.showFolderNamesAtRoot = CFG_DEFAULT_SHOWFOLDERNAMESATROOT,
         .inputPromptStyle = CFG_DEFAULT_INPUT_PROMPT_STYLE,
         .paletteName = CFG_DEFAULT_PALETTE_NAME,
@@ -369,6 +371,16 @@ void CFG_init(FontLoad_callback_t cb, ColorSet_callback_t ccb)
             if (sscanf(line, "artWidth=%i", &temp_value) == 1)
             {
                 CFG_setGameArtWidth((double)temp_value / 100.0);
+                continue;
+            }
+            if (sscanf(line, "artHeight=%i", &temp_value) == 1)
+            {
+                CFG_setGameArtHeightRaw((double)temp_value / 100.0);
+                continue;
+            }
+            if (sscanf(line, "artHeightPadding=%i", &temp_value) == 1)
+            {
+                CFG_setGameArtHeightPadding((bool)temp_value);
                 continue;
             }
             if (sscanf(line, "wifi=%i", &temp_value) == 1)
@@ -959,6 +971,37 @@ void CFG_setGameArtWidth(double zeroToOne)
     CFG_sync();
 }
 
+double CFG_getGameArtHeight(void)
+{
+    // padding on keeps the art clear of the top and bottom of the screen;
+    // turning it off hands the height over to the user
+    if (settings.gameArtHeightPadding)
+        return CFG_DEFAULT_GAMEARTHEIGHT;
+    return settings.gameArtHeight;
+}
+
+double CFG_getGameArtHeightRaw(void)
+{
+    return settings.gameArtHeight;
+}
+
+void CFG_setGameArtHeightRaw(double zeroToOne)
+{
+    settings.gameArtHeight = clampd(zeroToOne, 0.0, 1.0);
+    CFG_sync();
+}
+
+bool CFG_getGameArtHeightPadding(void)
+{
+    return settings.gameArtHeightPadding;
+}
+
+void CFG_setGameArtHeightPadding(bool padded)
+{
+    settings.gameArtHeightPadding = padded;
+    CFG_sync();
+}
+
 bool CFG_getWifi(void)
 {
     return settings.wifi;
@@ -1455,7 +1498,15 @@ void CFG_get(const char *key, char *value)
     }
     else if (strcmp(key, "artWidth") == 0)
     {
-        sprintf(value, "%i", (int)(CFG_getGameArtWidth()) * 100);
+        sprintf(value, "%i", (int)(CFG_getGameArtWidth() * 100));
+    }
+    else if (strcmp(key, "artHeight") == 0)
+    {
+        sprintf(value, "%i", (int)(CFG_getGameArtHeightRaw() * 100));
+    }
+    else if (strcmp(key, "artHeightPadding") == 0)
+    {
+        sprintf(value, "%i", (int)(CFG_getGameArtHeightPadding()));
     }
     else if (strcmp(key, "wifi") == 0)
     {
@@ -1638,6 +1689,8 @@ void CFG_sync(void)
     fprintf(file, "fn2action=%s\n", settings.fnAction[1]);
     fprintf(file, "fn3action=%s\n", settings.fnAction[2]);
     fprintf(file, "artWidth=%i\n", (int)(settings.gameArtWidth * 100));
+    fprintf(file, "artHeight=%i\n", (int)(settings.gameArtHeight * 100));
+    fprintf(file, "artHeightPadding=%i\n", settings.gameArtHeightPadding);
     fprintf(file, "wifi=%i\n", settings.wifi);
     fprintf(file, "defaultView=%i\n", settings.defaultView);
     fprintf(file, "quickSwitcherUi=%i\n", settings.showQuickSwitcherUi);
@@ -1712,6 +1765,8 @@ void CFG_print(void)
     printf("\t\"fn2action\": \"%s\",\n", settings.fnAction[1]);
     printf("\t\"fn3action\": \"%s\",\n", settings.fnAction[2]);
     printf("\t\"artWidth\": %i,\n", (int)(settings.gameArtWidth * 100));
+    printf("\t\"artHeight\": %i,\n", (int)(settings.gameArtHeight * 100));
+    printf("\t\"artHeightPadding\": %i,\n", settings.gameArtHeightPadding);
     printf("\t\"wifi\": %i,\n", settings.wifi);
     printf("\t\"defaultView\": %i,\n", settings.defaultView);
     printf("\t\"quickSwitcherUi\": %i,\n", settings.showQuickSwitcherUi);

@@ -1289,7 +1289,9 @@ void PLAT_scrollTextTexture(
     SDL_Surface* text_surface = SDL_CreateRGBSurfaceWithFormat(0,
         single_width * 2 + padding, single_height, 32, SDL_PIXELFORMAT_ARGB8888);
 
-    SDL_FillRect(text_surface, NULL, THEME_COLOR1);
+    // Transparent, not THEME_COLOR1: scrolling names may now extend over the
+    // game art, and an opaque fill would drag a solid bar across it.
+    SDL_FillRect(text_surface, NULL, SDL_MapRGBA(text_surface->format, 0, 0, 0, 0));
     SDL_BlitSurface(singleSur, NULL, text_surface, NULL);
 
     SDL_Rect second = { single_width + padding, 0, single_width, single_height };
@@ -1333,15 +1335,25 @@ void PLAT_scrollTextTexture(
 }
 
 
+// Composite order, back to front:
+//   layer1 background, layer3 game art, layer2 selection pill,
+//   stream_layer1 UI surface, layer4 scrolling text, layer5 transition overlay.
+// Game art sits below the UI surface so it can bleed past the list without
+// covering the list text, buttons or the hardware status pill. The selection
+// pill stays above the art but below the UI, so row text still draws over it.
+static void composeLayers(void) {
+	SDL_RenderCopy(vid.renderer, vid.target_layer1, NULL, NULL);
+	SDL_RenderCopy(vid.renderer, vid.target_layer3, NULL, NULL);
+	SDL_RenderCopy(vid.renderer, vid.target_layer2, NULL, NULL);
+	SDL_RenderCopy(vid.renderer, vid.stream_layer1, NULL, NULL);
+	SDL_RenderCopy(vid.renderer, vid.target_layer4, NULL, NULL);
+	SDL_RenderCopy(vid.renderer, vid.target_layer5, NULL, NULL);
+}
+
 // super fast without update_texture to draw screen
 void PLAT_GPU_Flip() {
 	SDL_RenderClear(vid.renderer);
-	SDL_RenderCopy(vid.renderer, vid.target_layer1, NULL, NULL);
-	SDL_RenderCopy(vid.renderer, vid.target_layer2, NULL, NULL);
-	SDL_RenderCopy(vid.renderer, vid.stream_layer1, NULL, NULL);
-	SDL_RenderCopy(vid.renderer, vid.target_layer3, NULL, NULL);
-	SDL_RenderCopy(vid.renderer, vid.target_layer4, NULL, NULL);
-	SDL_RenderCopy(vid.renderer, vid.target_layer5, NULL, NULL);
+	composeLayers();
 	SDL_RenderPresent(vid.renderer);
 }
 
@@ -1629,12 +1641,7 @@ void PLAT_flipHidden() {
 	SDL_RenderClear(vid.renderer);
 	resizeVideo(device_width, device_height, FIXED_PITCH); // !!!???
 	SDL_UpdateTexture(vid.stream_layer1, NULL, vid.screen->pixels, vid.screen->pitch);
-	SDL_RenderCopy(vid.renderer, vid.target_layer1, NULL, NULL);
-	SDL_RenderCopy(vid.renderer, vid.target_layer2, NULL, NULL);
-	SDL_RenderCopy(vid.renderer, vid.stream_layer1, NULL, NULL);
-	SDL_RenderCopy(vid.renderer, vid.target_layer3, NULL, NULL);
-	SDL_RenderCopy(vid.renderer, vid.target_layer4, NULL, NULL);
-	SDL_RenderCopy(vid.renderer, vid.target_layer5, NULL, NULL);
+	composeLayers();
 	//  SDL_RenderPresent(vid.renderer); // no present want to flip  hidden
 }
 
@@ -1645,12 +1652,7 @@ void PLAT_flip(SDL_Surface* IGNORED, int ignored) {
 	if (!vid.blit) {
         resizeVideo(device_width, device_height, FIXED_PITCH); // !!!???
         SDL_UpdateTexture(vid.stream_layer1, NULL, vid.screen->pixels, vid.screen->pitch);
-		SDL_RenderCopy(vid.renderer, vid.target_layer1, NULL, NULL);
-		SDL_RenderCopy(vid.renderer, vid.target_layer2, NULL, NULL);
-        SDL_RenderCopy(vid.renderer, vid.stream_layer1, NULL, NULL);
-		SDL_RenderCopy(vid.renderer, vid.target_layer3, NULL, NULL);
-		SDL_RenderCopy(vid.renderer, vid.target_layer4, NULL, NULL);
-		SDL_RenderCopy(vid.renderer, vid.target_layer5, NULL, NULL);
+        composeLayers();
         SDL_RenderPresent(vid.renderer);
         return;
     }
@@ -1661,12 +1663,7 @@ void PLAT_flip(SDL_Surface* IGNORED, int ignored) {
         vid.blit = NULL;
         resizeVideo(device_width, device_height, FIXED_PITCH);
         SDL_UpdateTexture(vid.stream_layer1, NULL, vid.screen->pixels, vid.screen->pitch);
-        SDL_RenderCopy(vid.renderer, vid.target_layer1, NULL, NULL);
-        SDL_RenderCopy(vid.renderer, vid.target_layer2, NULL, NULL);
-        SDL_RenderCopy(vid.renderer, vid.stream_layer1, NULL, NULL);
-        SDL_RenderCopy(vid.renderer, vid.target_layer3, NULL, NULL);
-        SDL_RenderCopy(vid.renderer, vid.target_layer4, NULL, NULL);
-        SDL_RenderCopy(vid.renderer, vid.target_layer5, NULL, NULL);
+        composeLayers();
         SDL_RenderPresent(vid.renderer);
         return;
     }

@@ -115,6 +115,8 @@ typedef struct
 	int gameSwitcherScaling; // enum
 	int gameSwitcherCurtain;
 	double gameArtWidth;	 // [0,1] -> 0-100% of screen width
+	double gameArtHeight;	 // [0,1] -> 0-100% of screen height, only used when gameArtHeightPadding is false
+	bool gameArtHeightPadding; // true pins art height to CFG_DEFAULT_GAMEARTHEIGHT, ignoring gameArtHeight
 	int inputPromptStyle; // enum
 	char paletteName[64]; // selected predefined color palette; empty == custom colors. keep in sync with PALETTE_NAME_MAX in palette.h
 	uint32_t customColors[7]; // last custom (non-palette) colors, restored by CFG_selectCustomPalette.
@@ -238,6 +240,8 @@ typedef struct
 #define CFG_DEFAULT_MUTELEDS false
 #define CFG_DEFAULT_FN_ACTION "" // unassigned
 #define CFG_DEFAULT_GAMEARTWIDTH 0.45
+#define CFG_DEFAULT_GAMEARTHEIGHT 0.60
+#define CFG_DEFAULT_GAMEARTHEIGHTPADDING true
 #define CFG_DEFAULT_WIFI false
 #define CFG_DEFAULT_VIEW SCREEN_GAMELIST
 #define CFG_DEFAULT_SHOWQUICKWITCHERUI true
@@ -396,6 +400,11 @@ void CFG_setFnAction(int index, const char* action);
 // Set game art width percentage.
 double CFG_getGameArtWidth(void);
 void CFG_setGameArtWidth(double zeroToOne);
+double CFG_getGameArtHeight(void); // effective height: the padded default unless padding is off
+double CFG_getGameArtHeightRaw(void); // the user-set value, regardless of the padding toggle
+void CFG_setGameArtHeightRaw(double zeroToOne);
+bool CFG_getGameArtHeightPadding(void);
+void CFG_setGameArtHeightPadding(bool padded);
 // Show/hide folder names at root directory.
 bool CFG_getShowFolderNamesAtRoot(void);
 void CFG_setShowFolderNamesAtRoot(bool show);
